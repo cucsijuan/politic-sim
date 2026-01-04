@@ -1,0 +1,3 @@
+[submodule "vendor/SDL-Engine"]
+	path = vendor/SDL-Engine
+	url = https://github.com/cucsijuan/SDL-Engine.git

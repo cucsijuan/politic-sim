@@ -1,0 +1,43 @@
+#pragma once
+
+#include <Engine/Engine.h>
+#include <Engine/Core/World/World.h>
+#include <Engine/Core/Camera/CameraFollowGO.h>
+#include <memory>
+
+namespace PoliticSim {
+
+/**
+ * Main game application class for the Political Simulation game
+ * Implements the IApplication interface from the SDL Engine
+ */
+class CPoliticalGame : public Engine::IApplication {
+private:
+	std::unique_ptr<CWorld> m_World;
+	std::unique_ptr<CCameraFollowGO> m_Camera;
+	const bool* m_KeyboardState;
+
+	static constexpr float CAMERA_SPEED = 200.0f;
+
+	// Helper methods
+	void HandleDiscreteInput(const SDL_Event& event);
+	void HandleContinuousInput(float deltaTime);
+	void UpdateCameraMovement(float deltaTime);
+
+public:
+	CPoliticalGame() = default;
+	virtual ~CPoliticalGame() = default;
+
+	// IApplication implementation
+	bool Initialize() override;
+	void HandleInput(const SDL_Event& event) override;
+	void Update(float deltaTime) override;
+	void Render(CRenderer& renderer) override;
+	void Cleanup() override;
+
+	// Accessors
+	CCameraFollowGO* GetCamera() const { return m_Camera.get(); }
+	CWorld* GetWorld() const { return m_World.get(); }
+};
+
+} // namespace PoliticSim

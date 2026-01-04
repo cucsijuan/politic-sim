@@ -1,0 +1,56 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# IDE specific
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.sln
+*.vcxproj
+*.vcxproj.filters
+
+# Executables
+*.exe
+*.out
+*.app
+PoliticSim
+
+# Object files
+*.o
+*.obj
+*.lo
+*.slo
+
+# Libraries
+*.lib
+*.a
+*.la
+*.so
+*.dylib
+*.dll
+
+# Logs
+*.log
+
+# OS specific
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.#*
+
+# Temporary files
+*.tmp
+*.temp
