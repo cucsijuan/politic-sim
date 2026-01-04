@@ -5,6 +5,10 @@ target_sources(PoliticSim
   PRIVATE
     main.cpp
     politic_game.cpp
+    Time/CTimeUnits.cpp
+    Time/CGameClock.cpp
+    Time/CTimeScale.cpp
+    Time/CTimeManager.cpp
 )
 
 # Include directories

@@ -3,6 +3,7 @@
 #include <Engine/Engine.h>
 #include <Engine/Core/World/World.h>
 #include <Engine/Core/Camera/CameraFollowGO.h>
+#include "Time/CTimeManager.h"
 #include <memory>
 
 namespace PoliticSim {
@@ -15,6 +16,7 @@ class CPoliticalGame : public Engine::IApplication {
 private:
 	std::unique_ptr<CWorld> m_World;
 	std::unique_ptr<CCameraFollowGO> m_Camera;
+	std::unique_ptr<CTimeManager> m_TimeManager;
 	const bool* m_KeyboardState;
 
 	static constexpr float CAMERA_SPEED = 200.0f;
@@ -38,6 +40,7 @@ public:
 	// Accessors
 	CCameraFollowGO* GetCamera() const { return m_Camera.get(); }
 	CWorld* GetWorld() const { return m_World.get(); }
+	CTimeManager* GetTimeManager() const { return m_TimeManager.get(); }
 };
 
 } // namespace PoliticSim
