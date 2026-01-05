@@ -9,6 +9,8 @@ target_sources(PoliticSim
     Time/CGameClock.cpp
     Time/CTimeScale.cpp
     Time/CTimeManager.cpp
+    Economy/CCompany.cpp
+    Economy/CEconomyManager.cpp
 )
 
 # Include directories

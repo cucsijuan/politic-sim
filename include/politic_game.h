@@ -4,6 +4,7 @@
 #include <Engine/Core/World/World.h>
 #include <Engine/Core/Camera/CameraFollowGO.h>
 #include "Time/CTimeManager.h"
+#include "Economy/CEconomyManager.h"
 #include <memory>
 
 namespace PoliticSim {
@@ -17,7 +18,10 @@ private:
 	std::unique_ptr<CWorld> m_World;
 	std::unique_ptr<CCameraFollowGO> m_Camera;
 	std::unique_ptr<CTimeManager> m_TimeManager;
+	std::unique_ptr<CEconomyManager> m_EconomyManager;
 	const bool* m_KeyboardState;
+
+	int32_t m_SelectedCompanyID;
 
 	static constexpr float CAMERA_SPEED = 200.0f;
 
@@ -27,7 +31,7 @@ private:
 	void UpdateCameraMovement(float deltaTime);
 
 public:
-	CPoliticalGame() = default;
+	CPoliticalGame() : m_SelectedCompanyID(-1) {}
 	virtual ~CPoliticalGame() = default;
 
 	// IApplication implementation
@@ -41,6 +45,7 @@ public:
 	CCameraFollowGO* GetCamera() const { return m_Camera.get(); }
 	CWorld* GetWorld() const { return m_World.get(); }
 	CTimeManager* GetTimeManager() const { return m_TimeManager.get(); }
+	CEconomyManager* GetEconomyManager() const { return m_EconomyManager.get(); }
 };
 
 } // namespace PoliticSim

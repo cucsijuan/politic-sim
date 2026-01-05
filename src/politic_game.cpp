@@ -1,7 +1,12 @@
 #include "politic_game.h"
 
 #include <Engine/Core/Camera/CameraManager.h>
+#include <Economy/ECompanyTypes.h>
+#include <Economy/SCompanyState.h>
+#include <Economy/SCompanyAttributes.h>
+#include <Economy/CCompany.h>
 #include <iostream>
+#include <vector>
 #include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_sdlrenderer3.h>
@@ -32,6 +37,11 @@ bool CPoliticalGame::Initialize() {
 	m_TimeManager = std::make_unique<CTimeManager>();
 	m_TimeManager->Initialize();
 	std::cout << "Time Manager initialized (Month-based granularity)" << std::endl;
+
+	// Initialize economy manager
+	m_EconomyManager = std::make_unique<CEconomyManager>();
+	m_EconomyManager->Initialize();
+	std::cout << "Economy Manager initialized" << std::endl;
 
 	std::cout << "Political Game initialized successfully!" << std::endl;
 	std::cout << "Controls: WASD to move camera" << std::endl;
@@ -181,6 +191,12 @@ void CPoliticalGame::Update(float deltaTime) {
 	// Camera uses real-time for smooth movement
 	HandleContinuousInput(deltaTime);
 
+	// Economy manager uses game time for simulation
+	if (m_EconomyManager)
+	{
+		m_EconomyManager->Update(gameDelta);
+	}
+
 	// World uses game time for simulation
 	if (m_World)
 	{
@@ -309,6 +325,306 @@ void CPoliticalGame::Render(CRenderer& renderer) {
 		ImGui::End();
 	}
 
+	// Policy Parameters UI
+	if (m_EconomyManager)
+	{
+		ImGui::Begin("Policy Parameters");
+
+		SPolicyParams& policy = m_EconomyManager->GetPolicyParams();
+
+		ImGui::Text("Tax Policy");
+		ImGui::SliderFloat("Corporate Tax Rate", &policy.m_CorporateTaxRate, 0.0f, 50.0f, "%.1f%%");
+		ImGui::SliderFloat("Labor Tax Rate", &policy.m_LaborTaxRate, 0.0f, 30.0f, "%.1f%%");
+
+		ImGui::Separator();
+
+		ImGui::Text("Labor Regulations");
+		ImGui::SliderFloat("Minimum Wage", &policy.m_MinimumWage, 0.0f, 30.0f, "$%.2f/hr");
+		ImGui::SliderFloat("Labor Regulation Burden", &policy.m_LaborRegulationBurden, 0.0f, 1.0f, "%.2f");
+
+		ImGui::Separator();
+
+		ImGui::Text("Environmental Policy");
+		ImGui::SliderFloat("Environmental Compliance Cost", &policy.m_EnvironmentalComplianceCost, 0.0f, 1.0f, "%.2f");
+		ImGui::Checkbox("Strict Environmental Policy", &policy.m_StrictEnvironmentalPolicy);
+
+		ImGui::Separator();
+
+		ImGui::Text("Business Support");
+		ImGui::Checkbox("Enable Subsidies", &policy.m_SubsidiesEnabled);
+		if (policy.m_SubsidiesEnabled)
+		{
+			ImGui::SliderFloat("Subsidy Rate", &policy.m_SubsidyRate, 0.0f, 10.0f, "%.1f%%");
+		}
+
+		ImGui::Separator();
+
+		ImGui::Text("Trade Policy");
+		ImGui::SliderFloat("Tariff Rate", &policy.m_TariffRate, 0.0f, 50.0f, "%.1f%%");
+
+		ImGui::End();
+	}
+
+	// Company Data UI
+	if (m_EconomyManager)
+	{
+		ImGui::Begin("Company Data");
+
+		// Aggregates
+		const SMacroState& macro = m_EconomyManager->GetMacroState();
+
+		ImGui::Text("Economy Overview");
+		ImGui::Separator();
+		ImGui::Text("Total Companies: %zu", m_EconomyManager->GetCompanyCount());
+		ImGui::Text("Total Employment: %.0f", m_EconomyManager->GetTotalEmployment());
+		ImGui::Text("Total GDP: $%.1fK", m_EconomyManager->GetTotalGDP());
+		ImGui::Text("Average Profitability: $%.2fK", m_EconomyManager->GetAverageProfitability());
+		ImGui::Text("Unemployment Rate: %.1f%%", m_EconomyManager->GetUnemploymentRate());
+		ImGui::Text("Business Confidence: %.1f", macro.m_BusinessConfidence);
+		ImGui::Text("Aggregate Demand: %.2f", macro.m_AggregateDemand);
+
+		ImGui::Separator();
+		ImGui::Separator();
+
+		// Per-company table (scrollable)
+		static ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg |
+		                                   ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersOuter |
+		                                   ImGuiTableFlags_SizingFixedFit;
+
+		if (ImGui::BeginTable("Companies", 7, flags, ImVec2(0, 300)))
+		{
+			ImGui::TableSetupScrollFreeze(0, 1);
+			ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 50.0f);
+			ImGui::TableSetupColumn("Sector", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+			ImGui::TableSetupColumn("Employees", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+			ImGui::TableSetupColumn("Profit", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+			ImGui::TableSetupColumn("Liquidity", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+			ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+			ImGui::TableHeadersRow();
+
+			const auto& companies = m_EconomyManager->GetCompanies();
+			for (const auto& company : companies)
+			{
+				const SCompanyState& state = company->GetState();
+				const SCompanyAttributes& attrs = company->GetAttributes();
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+
+				// Selectable row with highlight for selected company
+				bool isSelected = (static_cast<int32_t>(company->GetID()) == m_SelectedCompanyID);
+				if (isSelected)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+				}
+
+				std::string selectableLabel = "##" + std::to_string(company->GetID());
+				if (ImGui::Selectable(selectableLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap))
+				{
+					m_SelectedCompanyID = company->GetID();
+				}
+
+				if (isSelected)
+				{
+					ImGui::PopStyleColor();
+				}
+
+				// Display ID in the same column
+				ImGui::SameLine(0, 0);
+				ImGui::Text("%u", company->GetID());
+
+				ImGui::TableNextColumn();
+				const char* sector = nullptr;
+				switch (attrs.m_Sector)
+				{
+					case ESector::Agriculture: sector = "Ag"; break;
+					case ESector::Industry: sector = "Ind"; break;
+					case ESector::Services: sector = "Svc"; break;
+					case ESector::Technology: sector = "Tech"; break;
+					case ESector::Retail: sector = "Ret"; break;
+				}
+				ImGui::Text("%s", sector);
+
+				ImGui::TableNextColumn();
+				const char* size = nullptr;
+				switch (attrs.m_Size)
+				{
+					case ECompanySize::Micro: size = "Micro"; break;
+					case ECompanySize::Small: size = "Small"; break;
+					case ECompanySize::Medium: size = "Med"; break;
+					case ECompanySize::Large: size = "Large"; break;
+				}
+				ImGui::Text("%s", size);
+
+				ImGui::TableNextColumn();
+				ImGui::Text("%d", state.m_Employees);
+
+				ImGui::TableNextColumn();
+				ImGui::Text("$%.1fK", state.m_Profitability);
+
+				ImGui::TableNextColumn();
+				ImGui::Text("$%.0fK", state.m_Liquidity);
+
+				ImGui::TableNextColumn();
+				const char* stateStr = nullptr;
+				switch (state.m_State)
+				{
+					case ECompanyState::Growing: stateStr = "Grow"; break;
+					case ECompanyState::Stable: stateStr = "Stable"; break;
+					case ECompanyState::Declining: stateStr = "Decl"; break;
+					case ECompanyState::Crisis: stateStr = "CRISIS"; break;
+				}
+				ImGui::Text("%s", stateStr);
+			}
+
+			ImGui::EndTable();
+		}
+
+		ImGui::End();
+	}
+
+	// Market Saturation Window
+	if (m_EconomyManager)
+	{
+		ImGui::Begin("Market Saturation");
+
+		const SMacroState& macro = m_EconomyManager->GetMacroState();
+
+		ImGui::Text("Sector Saturation (higher = more competitive):");
+		ImGui::Separator();
+		ImGui::Text("Agriculture: %.1f%%", macro.m_SectorSaturation[0] * 100.0f);
+		ImGui::Text("Industry: %.1f%%", macro.m_SectorSaturation[1] * 100.0f);
+		ImGui::Text("Services: %.1f%%", macro.m_SectorSaturation[2] * 100.0f);
+		ImGui::Text("Technology: %.1f%%", macro.m_SectorSaturation[3] * 100.0f);
+		ImGui::Text("Retail: %.1f%%", macro.m_SectorSaturation[4] * 100.0f);
+
+		ImGui::Separator();
+		ImGui::Text("Import Competition:");
+		ImGui::Separator();
+		ImGui::Text("Agriculture: %.1f%%", macro.m_ImportCompetition[0] * 100.0f);
+		ImGui::Text("Industry: %.1f%%", macro.m_ImportCompetition[1] * 100.0f);
+		ImGui::Text("Services: %.1f%%", macro.m_ImportCompetition[2] * 100.0f);
+		ImGui::Text("Technology: %.1f%%", macro.m_ImportCompetition[3] * 100.0f);
+		ImGui::Text("Retail: %.1f%%", macro.m_ImportCompetition[4] * 100.0f);
+
+		ImGui::Separator();
+		ImGui::Text("Effects:");
+		ImGui::Text("• High saturation = lower revenue, slower growth");
+		ImGui::Text("• High import competition = domestic companies struggle");
+		ImGui::Text("• Tariffs reduce import competition");
+		ImGui::Text("• Large companies handle saturation better");
+
+		ImGui::End();
+	}
+
+	// Company History Graph Window
+	if (m_EconomyManager && m_SelectedCompanyID >= 0)
+	{
+		const CCompany* selectedCompany = nullptr;
+		const auto& companies = m_EconomyManager->GetCompanies();
+
+		// Find the selected company
+		for (const auto& company : companies)
+		{
+			if (static_cast<int32_t>(company->GetID()) == m_SelectedCompanyID)
+			{
+				selectedCompany = company.get();
+				break;
+			}
+		}
+
+		if (selectedCompany)
+		{
+			ImGui::Begin("Company History");
+
+			const SCompanyState& state = selectedCompany->GetState();
+			const SCompanyAttributes& attrs = selectedCompany->GetAttributes();
+
+			// Company info header
+			ImGui::Text("Company ID: %u", selectedCompany->GetID());
+			ImGui::SameLine();
+			ImGui::Text("Sector: ");
+			switch (attrs.m_Sector)
+			{
+				case ESector::Agriculture: ImGui::Text("Agriculture"); break;
+				case ESector::Industry: ImGui::Text("Industry"); break;
+				case ESector::Services: ImGui::Text("Services"); break;
+				case ESector::Technology: ImGui::Text("Technology"); break;
+				case ESector::Retail: ImGui::Text("Retail"); break;
+			}
+			ImGui::SameLine();
+			ImGui::Text("Size: ");
+			switch (attrs.m_Size)
+			{
+				case ECompanySize::Micro: ImGui::Text("Micro"); break;
+				case ECompanySize::Small: ImGui::Text("Small"); break;
+				case ECompanySize::Medium: ImGui::Text("Medium"); break;
+				case ECompanySize::Large: ImGui::Text("Large"); break;
+			}
+
+			ImGui::Separator();
+			ImGui::Text("Current State:");
+			ImGui::Text("Employees: %d", state.m_Employees);
+			ImGui::Text("Profit: $%.2fK", state.m_Profitability);
+			ImGui::Text("Liquidity: $%.0fK", state.m_Liquidity);
+			ImGui::Text("Revenue: $%.1fK", state.m_LastRevenue);
+
+			ImGui::Separator();
+			ImGui::Text("History (last 24 months):");
+
+			// Get history data
+			int32_t historyMonths = selectedCompany->GetHistoryMonths();
+			int32_t historyIndex = selectedCompany->GetHistoryIndex();
+
+			const float* profitHistory = selectedCompany->GetProfitHistory();
+			const float* employeesHistory = selectedCompany->GetEmployeesHistory();
+			const float* liquidityHistory = selectedCompany->GetLiquidityHistory();
+			const float* revenueHistory = selectedCompany->GetRevenueHistory();
+
+			// Prepare data arrays for ImGui (reorder from oldest to newest)
+			std::vector<float> profitValues(historyMonths);
+			std::vector<float> employeesValues(historyMonths);
+			std::vector<float> liquidityValues(historyMonths);
+			std::vector<float> revenueValues(historyMonths);
+
+			for (int32_t i = 0; i < historyMonths; ++i)
+			{
+				int32_t idx = (historyIndex + i) % historyMonths;
+				profitValues[i] = profitHistory[idx];
+				employeesValues[i] = employeesHistory[idx];
+				liquidityValues[i] = liquidityHistory[idx];
+				revenueValues[i] = revenueHistory[idx];
+			}
+
+			// Plot Profit History (Green)
+			ImGui::Text("Profit (K):");
+			ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.8f, 0.0f, 1.0f));
+			ImGui::PlotLines("##Profit", profitValues.data(), historyMonths, 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 80));
+			ImGui::PopStyleColor();
+
+			// Plot Employees History (Blue)
+			ImGui::Text("Employees:");
+			ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.4f, 1.0f, 1.0f));
+			ImGui::PlotLines("##Employees", employeesValues.data(), historyMonths, 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 80));
+			ImGui::PopStyleColor();
+
+			// Plot Liquidity History (Yellow)
+			ImGui::Text("Liquidity (K):");
+			ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(1.0f, 0.8f, 0.0f, 1.0f));
+			ImGui::PlotLines("##Liquidity", liquidityValues.data(), historyMonths, 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 80));
+			ImGui::PopStyleColor();
+
+			// Plot Revenue History (Cyan)
+			ImGui::Text("Revenue (K):");
+			ImGui::PushStyleColor(ImGuiCol_PlotLines, ImVec4(0.0f, 0.8f, 0.8f, 1.0f));
+			ImGui::PlotLines("##Revenue", revenueValues.data(), historyMonths, 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(0, 80));
+			ImGui::PopStyleColor();
+
+			ImGui::End();
+		}
+	}
+
 	// Demo window (can be removed later)
 	bool showDemo = true;
 	ImGui::ShowDemoWindow(&showDemo);
@@ -319,6 +635,13 @@ void CPoliticalGame::Render(CRenderer& renderer) {
 
 void CPoliticalGame::Cleanup() {
 	std::cout << "Cleaning up Political Game..." << std::endl;
+
+	// Shutdown economy manager
+	if (m_EconomyManager)
+	{
+		m_EconomyManager->Shutdown();
+		m_EconomyManager.reset();
+	}
 
 	// Shutdown time manager
 	if (m_TimeManager)
